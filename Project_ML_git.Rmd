@@ -1,10 +1,10 @@
 ---
 Author: JoelActuary
 Title: Predicting bar bell exercise motion
-date: "July 19, 2017"
+date: "July 21, 2017"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
   word_document: default
 ---
 
@@ -28,26 +28,24 @@ library(randomForest)
 # Data preparation and pre-processing
 The data consists of measurements of speed and directions during lift repetitions, with over 150 variables being collected. Given that there will likely be significant correlations among some variables, we expect a Principal Components Analaysis (PCA) approach to be useful for pre-processing the data prior to model fitting. The purpose of PCA is to convert the variables into fewer principal components which are as uncorrelated as possible, but capture the majority of the observed data variance.
 
-In the below code section, we first read the data from its source files and then trim to include only variables for which there are complete data that can be used to calculate variances and covariances -  a prerequisite for PCA processing. 
+In the below code section, we first read the data from its source files and then trim to include only variables for which there are complete data that can be used to calculate variances and covariances -  a prerequisite for PCA processing - and appear to have some bearing on the "classe" variable. The variables selected are based on a high level exploration of the data.
 
 
 ```{r echo=TRUE, cache=TRUE, warning=FALSE, message=FALSE}
 # read in the obvserved source data
 data_all <- read.csv("./data/pml-training.csv", na.strings = c("#DIV/0!","NA",""), stringsAsFactors = FALSE)
 
-# trim data to complete columns
-data_trim <- data_all[,colSums(is.na(data_all))==0] # filter for complete columns
-check_vars <- apply(data_trim, var, MARGIN = 2)
-data_trim <- data_trim[,!is.na(check_vars)] # filter columns which can support covariance calculations
-data_trim <- cbind(classe = data_all$classe,data_trim)
+# trim data to useful and complete measurement columns which can reliably support PCA preprocessing.
+data_trim <- data_all[,c(7:11,37:49,60:68,84:86,102,113:124,140,151:160)]
 data_trim$classe <- factor(data_trim$classe)
+
 ```
 
 
 # Data Preprocessing and Partitioning
 As mentioned above, we will use a PCA approach to pre-process the data before model fitting. Before this step, we will first partition the data such that a random 75% of the observations are used to estimate a model fit. The remaining 25% will be used for cross-validating the model fit, by verifying how well predictions match with actual experience. 
 
-The PCA processing aims to translate the data into principal components which capture 90% of the original training data's variance. Based on this threshold, we are able to trim the variables down from 60 to 21 principal components.
+The PCA processing aims to translate the data into principal components which capture 80% of the original training data's variance. Based on this threshold, we are able to trim the variables down from 54 to 13 principal components.
 ```{r echo=TRUE, cache=TRUE, warning=FALSE, message=FALSE}
 ## Split data in training and validation
 set.seed(1234)
@@ -57,14 +55,14 @@ testing <- data_trim[-inTrain,]
 
 # PCA preprocessing
 set.seed(1234)
-preProc <- preProcess(training[,-1], method="pca", thresh = 0.90)
+preProc <- preProcess(training[,-54], method="pca", thresh = 0.80)
 train_PC <- predict(preProc, training) 
 head(train_PC)
 ```
 
 
 # Model Fit
-Given the non-linear, classification predictions being done, we have chosen to use a Random Forest model fit. The code below prints the results of this model fit, showing an out-of-sample error rate of less than 1%. 
+Given the non-linear, classification predictions being done, we have chosen to use a Random Forest model fit. The code below prints the results of this model fit, showing an out-of-sample error rate of about 3%. 
 
 ```{r echo=TRUE, cache=TRUE, warning=FALSE, message=FALSE}
 model_Fit_rf <- randomForest(classe~., data = train_PC)
@@ -72,28 +70,11 @@ print(model_Fit_rf)
 ```
 
 # Cross Validation
-As a final check of the model's accuracy, we next apply it to the validation data which was carved out from the original data used to fit the model. This provides a more independent check of the model accuracy to the extent that data was not used for model fitting. Based on the Confusion Matrix output, the model predicts with about 99% accuracy. 
+As a final check of the model's accuracy, we next apply it to the validation data which was carved out from the original data used to fit the model. This provides a more independent check of the model accuracy to the extent that data was not used for model fitting. Based on the Confusion Matrix output, the model predicts with about 96% accuracy. 
 
 ```{r echo=TRUE, cache=TRUE}
 test_PC <- predict(preProc, testing)
 test_Predict_PC <- predict(model_Fit_rf, test_PC)
 confusionMatrix(test_Predict_PC, testing$classe)
 ```
-
-# Predictions on New Data
-Finally, as part of the course project, we apply the model to predict the classe variable on 20 new observations that were not used in training or validating the model. 
-
-```{r echo=TRUE, cache=TRUE, warning=FALSE, message=FALSE}
-# Read in the data from source
-data_new <- read.csv("./data/pml-testing.csv", na.strings = c("#DIV/0!","NA",""), stringsAsFactors = FALSE)
-
-data_new_trim <- data_new[,colSums(is.na(data_new))==0] # filter for complete columns
-check_vars_new <- apply(data_new_trim, var, MARGIN = 2)
-data_new_trim <- data_new_trim[,!is.na(check_vars_new)] # filter columns which can support covariance calculations
-
-new_PC <- predict(preProc, data_new_trim)
-new_Predict_PC <- predict(model_Fit_rf, new_PC)
-new_Predict_PC
-```
-
 
